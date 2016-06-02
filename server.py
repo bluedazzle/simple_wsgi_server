@@ -1,10 +1,13 @@
 # coding: utf-8
 from __future__ import unicode_literals
+
 import socket
 import StringIO
 import sys
-
 import datetime
+
+from middleware import TestMiddle
+from wsgiref import simple_server
 
 
 class WSGIServer(object):
@@ -32,16 +35,22 @@ class WSGIServer(object):
     def handle_request(self):
         self.request_data = self.connection.recv(1024)
         self.request_lines = self.request_data.splitlines()
-
-        print '[{0}] "{1}" 200'.format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                     self.request_lines[0])
-        self.get_url_parameter()
-        env = self.get_environ()
-        app_data = self.application(env, self.start_response)
-        self.finish_response(app_data)
+        try:
+            self.get_url_parameter()
+            env = self.get_environ()
+            app_data = self.application(env, self.start_response)
+            self.finish_response(app_data)
+            print '[{0}] "{1}" {2}'.format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                           self.request_lines[0], self.status)
+        except Exception, e:
+            pass
 
     def get_url_parameter(self):
-        self.request_method, self.path, self.request_version = self.request_lines[0].split()
+        self.request_dict = {'Path': self.request_lines[0]}
+        for itm in self.request_lines[1:]:
+            if ':' in itm:
+                self.request_dict[itm.split(':')[0]] = itm.split(':')[1]
+        self.request_method, self.path, self.request_version = self.request_dict.get('Path').split()
 
     def get_environ(self):
         env = {
@@ -55,7 +64,8 @@ class WSGIServer(object):
             'REQUEST_METHOD': self.request_method,
             'PATH_INFO': self.path,
             'SERVER_NAME': self.host,
-            'SERVER_PORT': self.port
+            'SERVER_PORT': self.port,
+            'USER_AGENT': self.request_dict.get('User-Agent')
         }
         return env
 
@@ -90,7 +100,7 @@ if __name__ == '__main__':
 
     def generate_server(address, application):
         server = WSGIServer(address)
-        server.set_application(application)
+        server.set_application(TestMiddle(application))
         return server
 
 
